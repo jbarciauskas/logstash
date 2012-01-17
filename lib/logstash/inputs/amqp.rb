@@ -62,8 +62,11 @@ class LogStash::Inputs::Amqp < LogStash::Inputs::Base
   # Enable or disable SSL
   config :ssl, :validate => :boolean, :default => false
 
-  # Pass in ssl options, see OpenSSL::SSL::SSLContext for valid options
-  config :ssl_opts, :validate => :hash, :default => {}
+  # Pass in ssl cert
+  config :ssl_cert, :validate => :string, :default => nil
+
+  # Pass in ssl private key
+  config :ssl_key, :validate => :string, :default => nil
 
   # Validate SSL certificate
   config :verify_ssl, :validate => :boolean, :default => false
@@ -92,7 +95,8 @@ class LogStash::Inputs::Amqp < LogStash::Inputs::Base
     @amqpsettings[:pass] = @password.value if @password
     @amqpsettings[:logging] = @debug
     @amqpsettings[:ssl] = @ssl if @ssl
-    @amqpsettings[:ssl_opts] = @ssl_opts if @ssl_opts
+    @amqpsettings[:ssl_cert] = @ssl_cert if @ssl_cert
+    @amqpsettings[:ssl_key] = @ssl_key if @ssl_key
     @amqpsettings[:verify_ssl] = @verify_ssl if @verify_ssl
     @amqpurl = "amqp://"
     amqp_credentials = ''
