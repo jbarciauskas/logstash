@@ -143,7 +143,7 @@ class LogStash::Outputs::ElasticSearch < LogStash::Outputs::Base
         @logger.info("Too many active ES requests, blocking now.", 
                      :inflight_requests => @inflight_requests,
                      :max_inflight_requests => @max_inflight_requests);
-        @inflight_cv.wait(@inflight_mutex)
+        @inflight_cv.wait(@inflight_mutex, 10)
       end
     end
 
