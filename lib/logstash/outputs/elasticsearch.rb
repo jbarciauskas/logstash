@@ -101,9 +101,7 @@ class LogStash::Outputs::ElasticSearch < LogStash::Outputs::Base
     options[:type] = :node
 
     @client = ElasticSearch::Client.new(options)
-    @inflight_requests = 0
-    @inflight_mutex = Mutex.new
-    @inflight_cv = ConditionVariable.new
+    @inflightSemaphore = java.util.concurrent.Semaphore.new(@max_inflight_requests, true)
 
     # TODO(sissel): Set up the bulkstream.
   end # def register
@@ -127,59 +125,23 @@ class LogStash::Outputs::ElasticSearch < LogStash::Outputs::Base
 
     index = event.sprintf(@index)
     type = event.sprintf(@index_type)
-    # TODO(sissel): allow specifying the ID?
-    # The document ID is how elasticsearch determines sharding hash, so it can
-    # help performance if we allow folks to specify a specific ID.
-    # TODO(sissel): Use the bulk index api, but to do this I need to figure out
-    # how to handle indexing errors especially related to part of the full bulk
-    # request. In the mean-time, keep track of the number of outstanding requests
-    # and block if we reach that maximum.
 
-    # If current in-flight requests exceeds max_inflight_requests, block until
-    # it doesn't.
-    @inflight_mutex.synchronize do
-      # Keep blocking until it's safe to send new requests.
-      while @inflight_requests >= @max_inflight_requests
-        @logger.info("Too many active ES requests, blocking now.", 
-                     :inflight_requests => @inflight_requests,
-                     :max_inflight_requests => @max_inflight_requests);
-        @inflight_cv.wait(@inflight_mutex)
-      end
-    end
-
+    @inflightSemaphore.acquire()
     req = @client.index(index, type, event.to_hash) 
-    increment_inflight_request_count
+    @logger.info("ElasticSearch in-flight requests", :count => (@max_inflight_requests - @inflightSemaphore.availablePermits()))
     #timer = @logger.time("elasticsearch write")
     req.on(:success) do |response|
       @logger.debug("Successfully indexed", :event => event.to_hash)
+      @inflightSemaphore.release()
       #timer.stop
-      decrement_inflight_request_count
     end.on(:failure) do |exception|
       @logger.debug("Failed to index an event", :exception => exception,
                     :event => event.to_hash)
+      @inflightSemaphore.release()
       #timer.stop
-      decrement_inflight_request_count
     end
 
     # Execute this request asynchronously.
     req.execute
   end # def receive
-
-  # Ruby doesn't appear to have a semaphore implementation, so this is a
-  # hack until I write one.
-  private
-  def increment_inflight_request_count
-    @inflight_mutex.synchronize do
-      @inflight_requests += 1
-      @logger.info("ElasticSearch in-flight requests", :count => @inflight_requests)
-    end
-  end # def increment_inflight_request_count
-
-  private
-  def decrement_inflight_request_count
-    @inflight_mutex.synchronize do
-      @inflight_requests -= 1
-      @inflight_cv.signal
-    end
-  end # def decrement_inflight_request_count
-end # class LogStash::Outputs::Elasticsearch
+end
