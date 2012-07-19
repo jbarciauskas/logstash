@@ -135,29 +135,20 @@ class LogStash::Inputs::Amqp < LogStash::Inputs::Threadable
       @queue = @channel.queue(@name, {:durable => @durable, :auto_delete => @auto_delete, :exclusive => @exclusive, :arguments => @arguments_hash })
       do_bind(@driver, @queue, @exchange, @key)
 
-      timer = @metric_amqp_read.time
       if @driver == 'hot_bunnies'
         subscription = @queue.subscribe(:ack => @ack, :blocking => true) do |headers,data|
-          timer.stop
           e = to_event(data, @amqp_url)
           if e
-            @metric_queue_write.time do
-              queue << e
-              headers.ack if @ack == true # ack after we know we're good
-            end
+            queue << e
+            headers.ack if @ack == true # ack after we know we're good
           end
-          time = @metric_amqp_read.time
         end # @queue.subscribe
       else
         @queue.subscribe({:ack => @ack}) do |data|
-          timer.stop
           e = to_event(data[:payload], @amqpurl)
           if e
-            @metric_queue_write.time do
-              queue << e
-            end
+            queue << e
           end
-          timer = @metric_amqp_read.time
         end # @queue.subscribe
       end # @driver.subscribe
 
